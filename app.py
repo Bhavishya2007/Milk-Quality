@@ -1,185 +1,169 @@
-from flask import Flask, request, jsonify, make_response
+"""
+🐄 Milk Quality Checker - Streamlit App 🐄
+Making dairy testing adorable! ✨
+"""
+
+import streamlit as st
 import joblib
-import numpy as np
 import pandas as pd
+import numpy as np
 
-app = Flask(__name__)
+# Page configuration
+st.set_page_config(
+    page_title="🐄 Milk Quality Checker",
+    page_icon="🐄",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 
-# Disable caching for development
-@app.after_request
-def add_header(response):
-    """Add cache-control headers to prevent caching"""
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
-    return response
+# Custom CSS for cute styling
+st.markdown("""
+<style>
+    .main {
+        background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+    }
+    .stApp {
+        background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+    }
+    .title {
+        text-align: center;
+        color: #8b5a2b;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+    .subtitle {
+        text-align: center;
+        color: #a0522d;
+        font-style: italic;
+    }
+    .hint {
+        color: #db7093;
+        font-size: 0.9em;
+    }
+    .result-box {
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center;
+        margin-top: 20px;
+    }
+    .result-low {
+        background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+        color: #2d5a27;
+    }
+    .result-medium {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        color: #8b4513;
+    }
+    .result-high {
+        background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+        color: #8b0000;
+    }
+    .footer {
+        text-align: center;
+        color: #8b4513;
+        margin-top: 30px;
+    }
+    .grade-emoji {
+        font-size: 3em;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Load the trained model
-model = joblib.load("milk_quality_model.pkl")
+@st.cache_resource
+def load_model():
+    return joblib.load("milk_quality_model.pkl")
 
-# Cute grade mapping
+model = load_model()
+
+# Grade mapping
 grade_map = {0: 'low', 1: 'medium', 2: 'high'}
 grade_emoji = {'low': '🟢', 'medium': '🟡', 'high': '🔴'}
+grade_names = {'low': 'LOW Quality', 'medium': 'MEDIUM Quality', 'high': 'HIGH Quality'}
 
-@app.route('/')
-def cute_home():
-    """Cute homepage"""
-    return '''
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>🐄 Milk Quality Checker 🐄</title>
-        <link rel="stylesheet" href="/static/style.css">
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>🐄 Milk Quality Checker 🐄</h1>
-                <p class="subtitle">Making dairy testing adorable! ✨</p>
-            </div>
-            
-            <div class="form-container">
-                <h2>🌸 Enter Milk Details 🌸</h2>
-                <p class="hint">💡 Hint: pH (3-10), Temp (20-90)</p>
-                <form id="milkForm">
-                    <div class="form-group">
-                        <label for="ph">🧪 pH Level:</label>
-                        <input type="number" step="0.1" id="ph" name="ph" placeholder="e.g., 6.6" min="3" max="10" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="temperature">🌡️ Temperature (°C):</label>
-                        <input type="number" id="temperature" name="temperature" placeholder="e.g., 35" min="20" max="90" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="taste">👅 Taste:</label>
-                        <select id="taste" name="taste" required>
-                            <option value="">Select...</option>
-                            <option value="1">Good (1)</option>
-                            <option value="0">Bad (0)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="odor">👃 Odor:</label>
-                        <select id="odor" name="odor" required>
-                            <option value="">Select...</option>
-                            <option value="1">Good (1)</option>
-                            <option value="0">Bad (0)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="fat">🥛 Fat:</label>
-                        <select id="fat" name="fat" required>
-                            <option value="">Select...</option>
-                            <option value="1">High (1)</option>
-                            <option value="0">Low (0)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="turbidity">💧 Turbidity:</label>
-                        <select id="turbidity" name="turbidity" required>
-                            <option value="">Select...</option>
-                            <option value="1">High (1)</option>
-                            <option value="0">Low (0)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="colour">🎨 Colour (240-255):</label>
-                        <input type="number" id="colour" name="colour" placeholder="e.g., 255" min="240" max="255" required>
-                    </div>
-                    
-                    <button type="submit" class="predict-btn">🔮 Predict Quality</button>
-                </form>
-                
-                <div id="result" class="result-container" style="display:none;">
-                    <h3>✨ Prediction Result ✨</h3>
-                    <div id="resultContent"></div>
-                </div>
-            </div>
-            
-            <div class="footer">
-                <p>🐮 Made with love for milk lovers! 🐮</p>
-            </div>
-        </div>
-        
-        <script>
-            document.getElementById('milkForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                const formData = new FormData(this);
-                const data = {};
-                formData.forEach((value, key) => data[key] = parseFloat(value));
-                
-                try {
-                    const response = await fetch('/predict', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(data)
-                    });
-                    
-                    const result = await response.json();
-                    const resultDiv = document.getElementById('result');
-                    const resultContent = document.getElementById('resultContent');
-                    
-                    resultDiv.style.display = 'block';
-                    
-                    if(result.success) {
-                        const emoji = grade_emoji[result.grade];
-                        resultContent.innerHTML = `
-                            <div class="grade-display ${result.grade}">
-                                <span class="grade-emoji">${emoji}</span>
-                                <span class="grade-text">${result.grade.toUpperCase()}</span>
-                                <span class="grade-emoji">${emoji}</span>
-                            </div>
-                            <p class="confidence">Confidence: ${(result.confidence * 100).toFixed(2)}% 💕</p>
-                        `;
-                    } else {
-                        resultContent.innerHTML = `<p class="error">❌ ${result.error}</p>`;
-                    }
-                } catch (error) {
-                    document.getElementById('result').style.display = 'block';
-                    document.getElementById('resultContent').innerHTML = `<p class="error">❌ Something went wrong!</p>`;
-                }
-            });
-            
-            // Define grade_emoji for JavaScript
-            const grade_emoji = {'low': '🟢', 'medium': '🟡', 'high': '🔴'};
-        </script>
-    </body>
-    </html>
-    '''
+# Title
+st.markdown('<h1 class="title">🐄 Milk Quality Checker 🐄</h1>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Making dairy testing adorable! ✨</p>', unsafe_allow_html=True)
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    """Predict milk quality"""
-    try:
-        data = request.get_json()
-        print("Received data:", data)
+st.write("")
+
+# Create form
+with st.container():
+    st.markdown("### 🌸 Enter Milk Details 🌸")
+    st.markdown('<p class="hint">💡 Hint: pH (3-10), Temp (20-90)</p>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        ph = st.number_input(
+            "🧪 pH Level",
+            min_value=3.0,
+            max_value=10.0,
+            value=6.6,
+            step=0.1,
+            help="Milk pH is typically between 6.5-6.8"
+        )
         
-        # Extract and validate features
-        ph = float(data['ph'])
-        temperature = float(data['temperature'])
-        taste = float(data['taste'])
-        odor = float(data['odor'])
-        fat = float(data['fat'])
-        turbidity = float(data['turbidity'])
-        colour = float(data['colour'])
+        temperature = st.number_input(
+            "🌡️ Temperature (°C)",
+            min_value=20.0,
+            max_value=90.0,
+            value=35.0,
+            help="Temperature in Celsius"
+        )
         
-        # Validate inputs
-        if not (0 <= ph <= 14):
-            return jsonify({'success': False, 'error': f'pH must be between 0-14, got {ph}'})
-        if not (0 <= temperature <= 100):
-            return jsonify({'success': False, 'error': f'Temperature must be 0-100°C, got {temperature}'})
+        taste = st.selectbox(
+            "👅 Taste",
+            options=[("", "Select..."), (1, "Good (1)"), (0, "Bad (0)")],
+            format_func=lambda x: x[1] if x else "Select..."
+        )
         
-        features = [ph, temperature, taste, odor, fat, turbidity, colour]
-        print("Features:", features)
+        odor = st.selectbox(
+            "👃 Odor",
+            options=[("", "Select..."), (1, "Good (1)"), (0, "Bad (0)")],
+            format_func=lambda x: x[1] if x else "Select..."
+        )
+    
+    with col2:
+        fat = st.selectbox(
+            "🥛 Fat",
+            options=[("", "Select..."), (1, "High (1)"), (0, "Low (0)")],
+            format_func=lambda x: x[1] if x else "Select..."
+        )
+        
+        turbidity = st.selectbox(
+            "💧 Turbidity",
+            options=[("", "Select..."), (1, "High (1)"), (0, "Low (0)")],
+            format_func=lambda x: x[1] if x else "Select..."
+        )
+        
+        colour = st.number_input(
+            "🎨 Colour (240-255)",
+            min_value=240,
+            max_value=255,
+            value=255,
+            help="Colour value between 240-255"
+        )
+
+# Check if all fields are filled
+all_filled = all([
+    taste != "",
+    odor != "",
+    fat != "",
+    turbidity != ""
+])
+
+# Predict button
+if st.button("🔮 Predict Quality", type="primary"):
+    if not all_filled:
+        st.error("❌ Please fill in all the fields!")
+    else:
+        # Extract features
+        features = [ph, temperature, 
+                   taste[0] if isinstance(taste, tuple) else taste, 
+                   odor[0] if isinstance(odor, tuple) else odor,
+                   fat[0] if isinstance(fat, tuple) else fat,
+                   turbidity[0] if isinstance(turbidity, tuple) else turbidity,
+                   colour]
         
         # Make prediction
         prediction = model.predict([features])[0]
@@ -188,32 +172,27 @@ def predict():
         
         grade = grade_map[int(prediction)]
         
-        return jsonify({
-            'success': True,
-            'grade': grade,
-            'confidence': float(confidence)
-        })
-    
-    except Exception as e:
-        print("Error:", str(e))
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
+        # Display result
+        st.markdown("### ✨ Prediction Result ✨")
+        
+        result_class = f"result-{grade}"
+        emoji = grade_emoji[grade]
+        
+        st.markdown(f"""
+        <div class="result-box {result_class}">
+            <div class="grade-emoji">{emoji} {emoji} {emoji}</div>
+            <h2>{grade_names[grade]}</h2>
+            <p>Confidence: {(confidence * 100):.2f}% 💕</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-@app.route('/cute')
-def cute_endpoint():
-    """Bonus cute endpoint with fun facts"""
-    return jsonify({
-        'message': '🐄 Moo! Welcome to the Milk Quality API! 🐄',
-        'endpoints': {
-            '/': '🌸 Cute homepage with form',
-            '/predict': '🔮 POST here for predictions',
-            '/cute': '✨ This fun endpoint!'
-        },
-        'fun_fact': 'Did you know? Cows have best friends and they get stressed when separated! 🐄💕'
-    })
+# Footer
+st.markdown("---")
+st.markdown('<p class="footer">🐮 Made with love for milk lovers! 🐮</p>', unsafe_allow_html=True)
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+# Fun cow facts
+with st.expander("🐄 Fun Cow Facts"):
+    st.write("🐮 Cows have best friends and they get stressed when separated!")
+    st.write("🥛 A cow produces an average of 6-8 gallons of milk per day!")
+    st.write("👀 Cows have almost 360-degree panoramic vision!")
 
